@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "498616526713",
+    "project_id": "despro-8d0d4",
+    "storage_bucket": "despro-8d0d4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:498616526713:android:92ab0c31a2d930685e31a8",
+        "android_client_info": {
+          "package_name": "com.example.web_despro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDA2vmjVcwYpVoXknG_GBftuo1sgPfRqcs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
