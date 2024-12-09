@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Kelas untuk menyimpan konfigurasi Firebase
+// Replace with your actual Firebase configuration
 class DefaultFirebaseOptions {
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyCl_iYijcOigoHG5syMOKQlLCgvZhwNli4',
@@ -43,21 +43,21 @@ class MyApp extends StatelessWidget {
 
 // Model data untuk chart_data
 class ChartData {
-  final DateTime timestamp; // Menggunakan DateTime untuk timestamp
+  final DateTime timestamp;
   final int peopleCount;
 
   ChartData({required this.timestamp, required this.peopleCount});
 
   factory ChartData.fromMap(Map<String, dynamic> map) {
-    final timestampStr = map['timestamp'] as String?;
-    if (timestampStr == null) {
+    final timestampUnix = map['timestamp'] as int?;
+    if (timestampUnix == null) {
       throw Exception("Field 'timestamp' is missing or null.");
     }
 
-    final peopleCount = map['people_count'] as int? ?? 0; // Menggunakan default value 0 jika null
+    final peopleCount = map['jumlah orang'] as int? ?? 0;
 
     return ChartData(
-      timestamp: DateTime.parse(timestampStr),
+      timestamp: DateTime.fromMillisecondsSinceEpoch(timestampUnix * 1000, isUtc: true).toLocal(),
       peopleCount: peopleCount,
     );
   }
@@ -66,226 +66,235 @@ class ChartData {
 class LineChartScreen extends StatelessWidget {
   const LineChartScreen({super.key});
 
-  // Fungsi untuk menambahkan data baru ke Firestore dengan interval 10 menit
-  Future<void> addChartData(int newPeopleCount) async {
-    try {
-      // Membuat dokumen baru dengan ID unik
-      DocumentReference<Map<String, dynamic>> docRef =
-          FirebaseFirestore.instance.collection('data_dummy').doc();
-
-      DateTime now = DateTime.now().toUtc();
-      String newTimeStr = now.toIso8601String();
-
-      // Menambahkan data ke Firestore
-      await docRef.set({
-        'jumlah_orang': newPeopleCount * 2, // Contoh logika untuk 'jumlah_orang'
-        'jam_rame': ['12:57', '17:28', '15:35'], // Contoh data jam_rame
-        'chart_data': [
-          {
-            'time': '06:00',
-            'people_count': newPeopleCount,
-            'timestamp': '2024-12-03T06:00:00Z'
-          },
-          {
-            'time': '07:00',
-            'people_count': newPeopleCount - 5,
-            'timestamp': '2024-12-03T07:00:00Z'
-          },
-          // Tambahkan lebih banyak data sesuai kebutuhan
-        ],
-        'timestamp': newTimeStr,
-      });
-
-      print("Data baru berhasil ditambahkan!");
-    } catch (e) {
-      print("Error menambahkan data: $e");
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Reference to the specific document in 'data_dummy' collection
+    final dataDocRef = FirebaseFirestore.instance.collection('data_dummy').doc('data'); // Replace 'data' with your actual document ID if different
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Statistik Aktivitas'),
       ),
       body: SafeArea(
-        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('data_dummy')
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const SizedBox(
-                height: 200, // Memberikan ruang untuk loading indicator
-                child: Center(child: CircularProgressIndicator()),
-              );
-            } else if (snapshot.hasError) {
-              return Center(child: Text("Error: ${snapshot.error}"));
-            } else if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return const Center(child: Text("Data tidak tersedia"));
-            } else {
-              final data = snapshot.data!.docs.map((doc) => doc.data()).toList();
-
-              List<ChartData> chartDataList = [];
-              try {
-                // Mengumpulkan semua entri chart_data dari semua dokumen
-                for (var docData in data) {
-                  final chartDataEntries = List<Map<String, dynamic>>.from(
-                      docData['chart_data'] ?? []);
-                  for (var entry in chartDataEntries) {
-                    try {
-                      final chartData = ChartData.fromMap(entry);
-                      // Memfilter data untuk hari yang sama
-                      final now = DateTime.now().toUtc();
-                      if (chartData.timestamp.year == now.year &&
-                          chartData.timestamp.month == now.month &&
-                          chartData.timestamp.day == now.day) {
-                        chartDataList.add(chartData);
-                      }
-                    } catch (e) {
-                      print("Error parsing chart_data entry: $e");
-                    }
-                  }
-                }
-
-                // Sortir data berdasarkan timestamp
-                chartDataList.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-              } catch (e) {
-                print("Error processing data: $e");
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Bagian Informasi
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.3),
-                            spreadRadius: 2,
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Informational Section
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.3),
+                        spreadRadius: 2,
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
                       ),
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Grafik Keramaian Halte FT UI',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Jumlah Orang Saat Ini
+                      Row(
                         children: [
+                          const Icon(Icons.people, color: Colors.blue, size: 24),
+                          const SizedBox(width: 8),
                           const Text(
-                            'Grafik Keramaian Halte FT UI',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              const Icon(Icons.people, color: Colors.blue, size: 24),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'Jumlah Orang Saat Ini:',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${chartDataList.isNotEmpty ? chartDataList.last.peopleCount : 0}',
-                                style: const TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Jam Paling Rame Minggu Sebelumnya:',
+                            'Jumlah Orang Saat Ini:',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                               color: Colors.black87,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          // Anda dapat menyesuaikan 'jam_rame' sesuai kebutuhan
-                          const Text(
-                            '08:00 AM, 12:00 PM, 05:00 PM',
-                            style: TextStyle(fontSize: 14, color: Colors.black87),
+                          const SizedBox(width: 8),
+                          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                            stream: dataDocRef.collection('count_people')
+                                .orderBy('timestamp', descending: true)
+                                .limit(1)
+                                .snapshots(),
+                            builder: (context, countSnapshot) {
+                              if (countSnapshot.connectionState == ConnectionState.waiting) {
+                                return const CircularProgressIndicator();
+                              } else if (countSnapshot.hasError) {
+                                return Text("Error: ${countSnapshot.error}");
+                              } else if (!countSnapshot.hasData || countSnapshot.data!.docs.isEmpty) {
+                                return const Text(
+                                  '0',
+                                  style: TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue,
+                                  ),
+                                );
+                              } else {
+                                final countData = countSnapshot.data!.docs.first.data();
+                                final jumlahOrang = countData['jumlah orang'] as int? ?? 0;
+                                return Text(
+                                  '$jumlahOrang',
+                                  style: const TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue,
+                                  ),
+                                );
+                              }
+                            },
                           ),
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 12),
+                      // Jam Terakhir Bikun Terlihat
+                      const Text(
+                        'Jam Terakhir Bikun Terlihat:',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: dataDocRef.collection('last_detected_bikun')
+                            .orderBy('jam bikun', descending: true)
+                            .limit(1)
+                            .snapshots(),
+                        builder: (context, bikunSnapshot) {
+                          if (bikunSnapshot.connectionState == ConnectionState.waiting) {
+                            return const CircularProgressIndicator();
+                          } else if (bikunSnapshot.hasError) {
+                            return Text("Error: ${bikunSnapshot.error}");
+                          } else if (!bikunSnapshot.hasData || bikunSnapshot.data!.docs.isEmpty) {
+                            return const Text(
+                              'Tidak ada data',
+                              style: TextStyle(fontSize: 14, color: Colors.black87),
+                            );
+                          } else {
+                            final bikunData = bikunSnapshot.data!.docs.first.data();
+                            final unixTimestamp = bikunData['jam bikun'] as int?;
+                            String jamTerakhirBikun = 'Tidak ada data';
+                            if (unixTimestamp != null) {
+                              final dateTime = DateTime.fromMillisecondsSinceEpoch(unixTimestamp * 1000, isUtc: true).toLocal();
+                              jamTerakhirBikun = DateFormat('HH:mm:ss').format(dateTime);
+                            }
+                            return Text(
+                              jamTerakhirBikun,
+                              style: const TextStyle(fontSize: 14, color: Colors.black87),
+                            );
+                          }
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  // Bagian Grafik
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.3),
-                            spreadRadius: 2,
-                            blurRadius: 5,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Grafik Hari Ini',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Graph Section
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  // Listen to 'count_people' subcollection
+                  stream: FirebaseFirestore.instance
+                      .collection('data_dummy')
+                      .doc('data') // Replace 'data' with your document ID
+                      .collection('count_people')
+                      .orderBy('timestamp')
+                      .snapshots(),
+                  builder: (context, graphSnapshot) {
+                    if (graphSnapshot.connectionState == ConnectionState.waiting) {
+                      return const SizedBox(
+                        height: 200,
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    } else if (graphSnapshot.hasError) {
+                      return Center(child: Text("Error: ${graphSnapshot.error}"));
+                    } else if (!graphSnapshot.hasData || graphSnapshot.data!.docs.isEmpty) {
+                      return const Center(child: Text("Data grafik tidak tersedia"));
+                    } else {
+                      final graphData = graphSnapshot.data!.docs.map((doc) {
+                        final data = doc.data();
+                        final unixTimestamp = data['timestamp'] as int?;
+                        final peopleCount = data['jumlah orang'] as int? ?? 0;
+                        if (unixTimestamp != null) {
+                          final dateTime = DateTime.fromMillisecondsSinceEpoch(unixTimestamp * 1000, isUtc: true).toLocal();
+                          return ChartData(timestamp: dateTime, peopleCount: peopleCount);
+                        } else {
+                          return ChartData(timestamp: DateTime.now(), peopleCount: 0);
+                        }
+                      }).toList();
+
+                      // Sort the data by timestamp
+                      graphData.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+                      return Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.3),
+                              spreadRadius: 2,
+                              blurRadius: 5,
+                              offset: const Offset(0, 3),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            height: 298, // Menyesuaikan tinggi grafik untuk menghindari overflow
-                            child: LineChartWidget(chartDataList: chartDataList),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }
-          },
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Grafik Hari Ini',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              height: 298, // Adjust the height as needed
+                              child: LineChartWidget(chartDataList: graphData),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          addChartData(25); // Contoh menambahkan 25 orang
-        },
-        child: const Icon(Icons.add),
-      ),
+      // Removed FloatingActionButton
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: () {
+      //     addChartData(25); // Example to add 25 people
+      //   },
+      //   child: const Icon(Icons.add),
+      // ),
     );
   }
 }
 
-// Widget untuk menggambar grafik garis
+// Widget to draw the line chart
 class LineChartWidget extends StatelessWidget {
   final List<ChartData> chartDataList;
 
@@ -293,21 +302,18 @@ class LineChartWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Membuat FlSpots berdasarkan waktu (jam) relatif terhadap 6 AM
+    // Create FlSpots based on time (hours)
     final spots = chartDataList.map((data) {
-      final hoursSinceSix =
-          data.timestamp.hour + data.timestamp.minute / 60.0 - 6.0;
-      // Clamp the value between 0 and 12 to fit the X-axis range
-      final clampedX = hoursSinceSix.clamp(0.0, 12.0);
-      return FlSpot(clampedX, data.peopleCount.toDouble());
+      final hours = data.timestamp.hour + data.timestamp.minute / 60.0 + data.timestamp.second / 3600.0;
+      return FlSpot(hours.toDouble(), data.peopleCount.toDouble());
     }).toList();
 
     return LineChart(
       LineChartData(
         minY: 0,
-        maxY: 60,
-        minX: 0, // 6 AM
-        maxX: 12, // 6 PM
+        maxY: 60, // Adjust as needed
+        minX: 0, // 00:00
+        maxX: 24, // 24:00
         titlesData: FlTitlesData(
           topTitles: const AxisTitles(
             sideTitles: SideTitles(showTitles: false),
@@ -330,10 +336,10 @@ class LineChartWidget extends StatelessWidget {
               showTitles: true,
               interval: 2,
               getTitlesWidget: (value, meta) {
-                if (value % 1 == 0 && value >= 0 && value <= 12) {
-                  final hour = value.toInt() + 6; // Mengembalikan ke jam asli
+                if (value % 2 == 0 && value >= 0 && value <= 24) {
+                  final hour = value.toInt();
                   final amPm = hour >= 12 ? 'PM' : 'AM';
-                  final displayHour = hour > 12 ? hour - 12 : hour;
+                  final displayHour = hour % 12 == 0 ? 12 : hour % 12;
                   return Text(
                     '$displayHour $amPm',
                     style: const TextStyle(fontSize: 10),
