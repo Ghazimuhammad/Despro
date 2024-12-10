@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Replace with your actual Firebase configuration
 class DefaultFirebaseOptions {
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyCl_iYijcOigoHG5syMOKQlLCgvZhwNli4',
@@ -41,35 +40,24 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Model data untuk chart_data
 class ChartData {
   final DateTime timestamp;
   final int peopleCount;
 
   ChartData({required this.timestamp, required this.peopleCount});
-
-  factory ChartData.fromMap(Map<String, dynamic> map) {
-    final timestampUnix = map['timestamp'] as int?;
-    if (timestampUnix == null) {
-      throw Exception("Field 'timestamp' is missing or null.");
-    }
-
-    final peopleCount = map['jumlah orang'] as int? ?? 0;
-
-    return ChartData(
-      timestamp: DateTime.fromMillisecondsSinceEpoch(timestampUnix * 1000, isUtc: true).toLocal(),
-      peopleCount: peopleCount,
-    );
-  }
 }
 
-class LineChartScreen extends StatelessWidget {
+class LineChartScreen extends StatefulWidget {
   const LineChartScreen({super.key});
 
   @override
+  State<LineChartScreen> createState() => _LineChartScreenState();
+}
+
+class _LineChartScreenState extends State<LineChartScreen> {
+  @override
   Widget build(BuildContext context) {
-    // Reference to the specific document in 'data_dummy' collection
-    final dataDocRef = FirebaseFirestore.instance.collection('data_dummy').doc('data'); // Replace 'data' with your actual document ID if different
+    final dataDocRef = FirebaseFirestore.instance.collection('data_dummy').doc('data');
 
     return Scaffold(
       appBar: AppBar(
@@ -80,7 +68,7 @@ class LineChartScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Informational Section
+              // Informasi Halte
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: Container(
@@ -110,7 +98,6 @@ class LineChartScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      // Jumlah Orang Saat Ini
                       Row(
                         children: [
                           const Icon(Icons.people, color: Colors.blue, size: 24),
@@ -160,7 +147,6 @@ class LineChartScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      // Jam Terakhir Bikun Terlihat
                       const Text(
                         'Jam Terakhir Bikun Terlihat:',
                         style: TextStyle(
@@ -190,8 +176,8 @@ class LineChartScreen extends StatelessWidget {
                             final unixTimestamp = bikunData['jam bikun'] as int?;
                             String jamTerakhirBikun = 'Tidak ada data';
                             if (unixTimestamp != null) {
-                              final dateTime = DateTime.fromMillisecondsSinceEpoch(unixTimestamp * 1000, isUtc: true).toLocal();
-                              jamTerakhirBikun = DateFormat('HH:mm:ss').format(dateTime);
+                              final dateTime = DateTime.fromMillisecondsSinceEpoch(unixTimestamp * 1000, isUtc: true);
+                              jamTerakhirBikun = DateFormat('HH:mm:ss').format(dateTime.toLocal());
                             }
                             return Text(
                               jamTerakhirBikun,
@@ -205,16 +191,12 @@ class LineChartScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              // Graph Section
+              // Grafik 24 jam terakhir
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  // Listen to 'count_people' subcollection
-                  stream: FirebaseFirestore.instance
-                      .collection('data_dummy')
-                      .doc('data') // Replace 'data' with your document ID
-                      .collection('count_people')
-                      .orderBy('timestamp')
+                  stream: dataDocRef.collection('count_people')
+                      .orderBy('timestamp', descending: false)
                       .snapshots(),
                   builder: (context, graphSnapshot) {
                     if (graphSnapshot.connectionState == ConnectionState.waiting) {
@@ -227,20 +209,49 @@ class LineChartScreen extends StatelessWidget {
                     } else if (!graphSnapshot.hasData || graphSnapshot.data!.docs.isEmpty) {
                       return const Center(child: Text("Data grafik tidak tersedia"));
                     } else {
-                      final graphData = graphSnapshot.data!.docs.map((doc) {
+                      final allData = graphSnapshot.data!.docs.map((doc) {
                         final data = doc.data();
                         final unixTimestamp = data['timestamp'] as int?;
-                        final peopleCount = data['jumlah orang'] as int? ?? 0;
+                        int peopleCount = data['jumlah orang'] as int? ?? 0;
                         if (unixTimestamp != null) {
                           final dateTime = DateTime.fromMillisecondsSinceEpoch(unixTimestamp * 1000, isUtc: true).toLocal();
+                          
+                          // Jika jam antara 21:00 hingga 6:00, set peopleCount = 0
+                          if (dateTime.hour >= 21 || dateTime.hour < 6) {
+                            peopleCount = 0;
+                          }
                           return ChartData(timestamp: dateTime, peopleCount: peopleCount);
                         } else {
                           return ChartData(timestamp: DateTime.now(), peopleCount: 0);
                         }
                       }).toList();
 
-                      // Sort the data by timestamp
-                      graphData.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+                      if (allData.isEmpty) {
+                        return const Center(child: Text("Tidak ada data untuk grafik"));
+                      }
+
+                      allData.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+                      final now = DateTime.now();
+                      final earliestDataTime = allData.first.timestamp;
+                      DateTime start;
+                      DateTime end;
+
+                      final twentyFourHoursAgo = now.subtract(const Duration(hours: 24));
+                      if (earliestDataTime.isAfter(twentyFourHoursAgo)) {
+                        start = twentyFourHoursAgo;
+                      } else {
+                        start = earliestDataTime;
+                      }
+                      end = start.add(const Duration(hours: 24));
+
+                      final graphData = allData.where((d) {
+                        return d.timestamp.isAfter(start) && d.timestamp.isBefore(end);
+                      }).toList();
+
+                      if (graphData.isEmpty) {
+                        return const Center(child: Text("Tidak ada data dalam 24 jam terakhir"));
+                      }
 
                       return Container(
                         width: double.infinity,
@@ -261,7 +272,7 @@ class LineChartScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Grafik Hari Ini',
+                              'Grafik 24 Jam Terakhir',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -269,8 +280,12 @@ class LineChartScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 16),
                             SizedBox(
-                              height: 298, // Adjust the height as needed
-                              child: LineChartWidget(chartDataList: graphData),
+                              height: 300,
+                              child: LineChartWidget(
+                                chartDataList: graphData,
+                                startTime: start,
+                                endTime: end,
+                              ),
                             ),
                           ],
                         ),
@@ -283,110 +298,144 @@ class LineChartScreen extends StatelessWidget {
           ),
         ),
       ),
-      // Removed FloatingActionButton
-      // floatingActionButton: FloatingActionButton(
-      //   onPressed: () {
-      //     addChartData(25); // Example to add 25 people
-      //   },
-      //   child: const Icon(Icons.add),
-      // ),
     );
   }
 }
 
-// Widget to draw the line chart
 class LineChartWidget extends StatelessWidget {
   final List<ChartData> chartDataList;
+  final DateTime startTime;
+  final DateTime endTime;
 
-  const LineChartWidget({super.key, required this.chartDataList});
+  const LineChartWidget({
+    Key? key,
+    required this.chartDataList,
+    required this.startTime,
+    required this.endTime,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // Create FlSpots based on time (hours)
+    if (chartDataList.isEmpty) {
+      return const Center(child: Text("Tidak ada data untuk grafik"));
+    }
+
     final spots = chartDataList.map((data) {
-      final hours = data.timestamp.hour + data.timestamp.minute / 60.0 + data.timestamp.second / 3600.0;
-      return FlSpot(hours.toDouble(), data.peopleCount.toDouble());
+      final diff = data.timestamp.difference(startTime).inSeconds;
+      final hoursFromStart = diff / 3600.0;
+      return FlSpot(hoursFromStart, data.peopleCount.toDouble());
     }).toList();
 
-    return LineChart(
-      LineChartData(
-        minY: 0,
-        maxY: 60, // Adjust as needed
-        minX: 0, // 00:00
-        maxX: 24, // 24:00
-        titlesData: FlTitlesData(
-          topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: 10,
-              getTitlesWidget: (value, meta) {
-                return Text(
-                  '${value.toInt()}',
-                  style: const TextStyle(fontSize: 10),
-                );
-              },
-              reservedSize: 40,
+    // Y-axis max selalu 30
+    final maxY = 30.0;
+    final minX = 0.0;
+    final maxX = 24.0;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 10, right: 10, top: 10, bottom: 30),
+      child: LineChart(
+        LineChartData(
+          minY: 0,
+          maxY: maxY,
+          minX: minX,
+          maxX: maxX,
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
             ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: 2,
-              getTitlesWidget: (value, meta) {
-                if (value % 2 == 0 && value >= 0 && value <= 24) {
-                  final hour = value.toInt();
-                  final amPm = hour >= 12 ? 'PM' : 'AM';
-                  final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                interval: 10,
+                reservedSize: 40,
+                getTitlesWidget: (value, meta) {
                   return Text(
-                    '$displayHour $amPm',
+                    '${value.toInt()}',
                     style: const TextStyle(fontSize: 10),
                   );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
-          ),
-          rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-        ),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: true,
-          verticalInterval: 2,
-          horizontalInterval: 10,
-          getDrawingHorizontalLine: (value) => FlLine(
-              color: Colors.grey.withOpacity(0.3), strokeWidth: 1),
-          getDrawingVerticalLine: (value) => FlLine(
-              color: Colors.grey.withOpacity(0.3), strokeWidth: 1),
-        ),
-        borderData: FlBorderData(
-          show: true,
-          border: Border.all(color: Colors.grey, width: 1),
-        ),
-        lineBarsData: [
-          LineChartBarData(
-            spots: spots,
-            isCurved: true,
-            color: Colors.blue,
-            barWidth: 3,
-            belowBarData: BarAreaData(
-              show: true,
-              gradient: LinearGradient(
-                colors: [
-                  Colors.blue.withOpacity(0.3),
-                  Colors.blue.withOpacity(0.1),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+                },
               ),
+              axisNameWidget: const Padding(
+                padding: EdgeInsets.only(bottom: 8.0),
+                child: Text(
+                  'Jumlah Orang',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              axisNameSize: 30,
             ),
-            dotData: const FlDotData(show: false),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                interval: 2,
+                reservedSize: 30,
+                getTitlesWidget: (value, meta) {
+                  final time = startTime.add(Duration(hours: value.toInt()));
+                  final displayHour = DateFormat('HH:mm').format(time);
+                  return Text(
+                    displayHour,
+                    style: const TextStyle(fontSize: 10),
+                  );
+                },
+              ),
+              axisNameWidget: const Padding(
+                padding: EdgeInsets.only(top: 8.0),
+                child: Text(
+                  'Waktu',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              axisNameSize: 30,
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
           ),
-        ],
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: true,
+            verticalInterval: 2,
+            horizontalInterval: 10,
+            getDrawingHorizontalLine: (value) => FlLine(
+              color: Colors.grey.withOpacity(0.3),
+              strokeWidth: 1,
+            ),
+            getDrawingVerticalLine: (value) => FlLine(
+              color: Colors.grey.withOpacity(0.3),
+              strokeWidth: 1,
+            ),
+          ),
+          borderData: FlBorderData(
+            show: true,
+            border: Border.all(color: Colors.grey, width: 1),
+          ),
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: true,
+              color: Colors.blue,
+              barWidth: 3,
+              belowBarData: BarAreaData(
+                show: true,
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.blue.withOpacity(0.3),
+                    Colors.blue.withOpacity(0.1),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+              dotData: const FlDotData(show: false),
+            ),
+          ],
+        ),
       ),
     );
   }
