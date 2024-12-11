@@ -215,7 +215,7 @@ class _LineChartScreenState extends State<LineChartScreen> {
                         int peopleCount = data['jumlah orang'] as int? ?? 0;
                         if (unixTimestamp != null) {
                           final dateTime = DateTime.fromMillisecondsSinceEpoch(unixTimestamp * 1000, isUtc: true).toLocal();
-                          
+
                           // Jika jam antara 21:00 hingga 6:00, set peopleCount = 0
                           if (dateTime.hour >= 21 || dateTime.hour < 6) {
                             peopleCount = 0;
@@ -232,18 +232,10 @@ class _LineChartScreenState extends State<LineChartScreen> {
 
                       allData.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
+                      // Always show the last 24 hours from now
                       final now = DateTime.now();
-                      final earliestDataTime = allData.first.timestamp;
-                      DateTime start;
-                      DateTime end;
-
-                      final twentyFourHoursAgo = now.subtract(const Duration(hours: 24));
-                      if (earliestDataTime.isAfter(twentyFourHoursAgo)) {
-                        start = twentyFourHoursAgo;
-                      } else {
-                        start = earliestDataTime;
-                      }
-                      end = start.add(const Duration(hours: 24));
+                      final start = now.subtract(const Duration(hours: 24));
+                      final end = now;
 
                       final graphData = allData.where((d) {
                         return d.timestamp.isAfter(start) && d.timestamp.isBefore(end);
